@@ -24,22 +24,24 @@ def generate_data():
         else:
             target.append("no")
         sample.append(each_sample_feature)
-    print sample
-    print target
     return sample, target
 
 def sigmoid(x):
     return 1/(1+np.exp(-x))
 
+def tanh(x):
+    print x
+    return 0.5*(np.log((1+x)/(1-x)))
 
 def dtanh(x):
-    return 1-x**2
+    return 1/(1.0-x**2)
+
+def dsigmoid(x):
+    return np.exp(-x)/((1+np.exp(-x))**2)
 
 class neural_network_classifier():
-    def __init__(self, dbname, sample, target):
+    def __init__(self, dbname):
         self.con = self.create_db(dbname)
-        self.sample = sample
-        self.target = target
         self.input_node = []
         self.hidden_node = []
         self.output_node = []
@@ -97,93 +99,102 @@ class neural_network_classifier():
             cur.execute(cmd)
             for i in each_sample:
                 self.update_weight('input_to_hidden_weight',i,hiddenid,1/float(len(each_sample)))
-            self.update_weight('hidden_to_output_weight',hiddenid,each_target,0.1)
+            for j in each_target:
+                self.update_weight('hidden_to_output_weight',hiddenid,j,0.1)
+
+    def activate_hidden(self, each_sample, targets):
+        cur = self.con.cursor()
+        hidden_actived = []
+        for i in each_sample:
+            cmd = "select toid from input_to_hidden_weight where fromid='{}'".format(i)
+            cur.execute(cmd)
+            result = cur.fetchall()
+            for j in result:
+                hidden_actived.append(j[0])
+        for i in targets:
+            cmd = "select fromid from hidden_to_output_weight where toid='{}'".format(i)
+            cur.execute(cmd)
+            result = cur.fetchall()
+            for j in result:
+                hidden_actived.append(j[0])
+        hidden_actived = list(set(hidden_actived))
+        return hidden_actived
+
+
+    def get_weight_list(self, each_sample, targets):
+        self.input_node = each_sample
+        self.hidden_node = self.activate_hidden(each_sample, targets)
+        self.output_node = targets
+
+        self.input_o = np.array([1.0]*len(self.input_node))
+        self.hidden_o = np.array([1.0]*len(self.hidden_node))
+        self.output_o = np.array([1.0]*len(self.output_node))
+
+        print self.input_node
+        print self.hidden_node
+        print self.output_node
+
+        self.wih = np.array([[self.get_weight('input_to_hidden_weight',j,i) for i in self.hidden_node] for j in self.input_node])
+        self.who = np.array([[self.get_weight('hidden_to_output_weight',j,i) for i in targets] for j in self.hidden_node])
+
  
-    def forward(self, each_sample, targets):
-        def activate_hidden(each_sample, targets):
-            cur = self.con.cursor()
-            hidden_actived = []
-            for i in each_sample:
-                cmd = "select toid from input_to_hidden_weight where fromid='{}'".format(i)
-                cur.execute(cmd) 
-                result = cur.fetchall()
-                for j in result:
-                    hidden_actived.append(j[0])
-            for i in targets:
-                cmd = "select fromid from hidden_to_output_weight where toid='{}'".format(i)
-                cur.execute(cmd)
-                result = cur.fetchall()
-                for j in result:
-                    hidden_actived.append(j[0])
-            hidden_actived = list(set(hidden_actived))
-            return hidden_actived
+    def forward(self):
 
-        def get_weight_list(each_sample, targets):
-            self.input_node = each_sample
-            self.hidden_node = activate_hidden(each_sample, targets)
-            self.output_node = targets
-            
-            self.input_o = np.array([1.0]*len(self.input_node))
-            self.hidden_o = np.array([1.0]*len(self.hidden_node))
-            self.output_o = np.array([1.0]*len(self.output_node))
-
-
-            self.wih = np.array([[self.get_weight('input_to_hidden_weight',i,j) for i in self.input_node] for j in self.hidden_node])
-            self.who = np.array([[self.get_weight('hidden_to_output_weight',i,j) for i in self.hidden_node] for j in targets])
-
-
-        get_weight_list(each_sample, targets)
-        self.hidden_o = sigmoid(np.dot(self.wih, self.input_o))
-        self.output_o = sigmoid(np.dot(self.who, self.hidden_o))
+        self.hidden_o = np.tanh(np.dot(self.input_o.reshape(1,len(self.input_o)), self.wih))[0]
+        #self.hidden_o = sigmoid(np.dot(self.input_o.reshape(1,len(self.input_o)), self.wih))[0]
+        self.output_o = np.tanh(np.dot(self.hidden_o.reshape(1,len(self.hidden_o)), self.who))[0]
+        #self.output_o = sigmoid(np.dot(self.hidden_o.reshape(1,len(self.hidden_o)), self.who))[0]
+        print self.input_o
+        print self.hidden_o
+        print self.output_o
         return self.output_o
 
-    def bp(self, targets, step=1):
+    def bp(self, targets, step=0.5):
+        #output error
+      
         output_error = np.array(targets)-self.output_o
+        
         output_delta = dtanh(self.output_o) * output_error
-        whochange = step* np.dot(output_delta.reshape(len(output_delta),1),self.hidden_o.reshape(1,len(self.hidden_o)))
-        self.who = self.who-whochange
+        #output_delta = dsigmoid(self.output_o) * output_error
 
-        tmp =  np.mat(self.who).I * output_delta.reshape(len(output_delta),1)
-        tmp1 = []
-        for i in tmp:
-            tmp1.append(float(i[0]))
-        hidden_error = np.array(tmp1)- self.hidden_o
+        #hidden error
+        
+        hidden_error =  np.dot(self.who , output_delta.reshape(len(output_delta),1))
         hidden_delta = dtanh(self.hidden_o)*hidden_error
-        wihchange = step*np.dot(hidden_delta.reshape(len(hidden_delta),1),self.input_o.reshape(1,len(self.input_o)))
-        self.wih = self.wih - wihchange
+        #hidden_delta = dsigmoid(self.hidden_o)*hidden_error
+        hidden_delta = hidden_delta[0]
+
+
+        whochange = step* np.dot(self.hidden_o.reshape(len(self.hidden_o),1),output_delta.reshape(1,len(output_delta)))
+        self.who = self.who+whochange
+
+        wihchange = step*np.dot(self.input_o.reshape(len(self.input_o),1),hidden_delta.reshape(1,len(hidden_delta)))
+        self.wih = self.wih+ wihchange
 
         
         
 
-    def train_nn(self):
-        all_targets = list(set(self.target))
-        for i in range(len(self.sample)):
-            each_sample = self.sample[i]
-            each_target = self.target[i]
-            self.generate_hidden(each_sample, each_target)
-            self.forward(each_sample, all_targets)
-            sign_target = []
-            for i in all_targets:
-                if i == each_target:
-                    sign_target.append(1)
-                else:
-                    sign_target.append(0)
-            print sign_target
-            self.bp(sign_target)
-            self.update_db()
+    def train_nn(self, sample, target, select):
+        self.generate_hidden(sample, target)
+        self.get_weight_list(sample, target)
+        self.forward()
+        targets = [0.0]*len(target)
+        targets[target.index(select)]=1.0
+        self.bp(targets)
+        self.update_db()
 
     def update_db(self):
-        for i in range(len(self.hidden_node)):
-            for j in range(len(self.input_node)):
-                self.update_weight('input_to_hidden_weight',self.input_node[j],self.hidden_node[i],self.wih[i,j])
-
-        for i in range(len(self.output_node)):
+        for i in range(len(self.input_node)):
             for j in range(len(self.hidden_node)):
-                self.update_weight('hidden_to_output_weight',self.hidden_node[j],self.output_node[i],self.who[i,j])
+                self.update_weight('input_to_hidden_weight',self.input_node[i],self.hidden_node[j],self.wih[i][j])
 
-    def predict(self, testdata):
-        all_targets = list(set(self.target))
-        return self.forward(testdata,all_targets)
+        for i in range(len(self.hidden_node)):
+            for j in range(len(self.output_node)):
+                self.update_weight('hidden_to_output_weight',self.hidden_node[i],self.output_node[j],self.who[i][j])
+
+    def get_result(self, sample, target):
+        self.get_weight_list(sample,target)
+        return self.forward()
 
         
     
@@ -193,13 +204,20 @@ class neural_network_classifier():
         
 if __name__=="__main__":
     sample, target = generate_data()
-    my_nn = neural_network_classifier('test', sample, target)
+    my_nn = neural_network_classifier('test')
     #my_nn.update_weight('hidden_to_output_weight','1','2','10')
     #my_nn.update_weight('input_to_hidden_weight','1','2','10')
-    #my_nn.generate_hidden(['cloudy','happy','enough'],['yes'])
-    #print my_nn.get_weight('hidden_to_output_weight','cloudy_happy_enough','yes')
-    #print my_nn.get_weight('hidden_to_output_weight','cloudy_happy_enough','no')
-    my_nn.train_nn()
-    print my_nn.predict(["cloudy","soso","enough"])
+    alltarget = list(set(target))
+    for i in range(len(sample)):
+        es = sample[i]
+        et = target[i]
+        
+        my_nn.generate_hidden(es,alltarget)
+        my_nn.get_weight_list(es,alltarget)
+        my_nn.train_nn(es,alltarget,et)
+    #print my_nn.get_result(["cloudy","soso","enough"],alltarget)
+    print my_nn.get_result(["sunny","sad","lack"],alltarget)
+    #print my_nn.forward()
+#    print my_nn.predict(["sunny","happy","more"])
 
 
