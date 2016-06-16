@@ -15,6 +15,9 @@ def open_db(user,passwd,dbname):
 
 
 def save_to_sql(conn, tablename, df):
+    df=df.sort()
+    index = pd.DataFrame(df.index.values,index=df.index,columns=["date"] )
+    df = df.join(index)
     df.to_sql(con=conn, name=tablename, if_exists='replace', flavor='mysql')
 
 
@@ -27,5 +30,6 @@ def read_sql(conn,tablename):
 
 if __name__ == "__main__":
     conn = open_db('root','root','ts_db')
-    #save_to_sql(conn,'ts_table',get_tushare_data('601601','2010-03-10','2016-03-10'))
-    print read_sql(conn,'ts_table')
+#    conn.cursor().execute("drop table if exists ts_table")
+    save_to_sql(conn,'ts_table',get_tushare_data('601601','2016-05-20','2016-06-10'))
+#    print read_sql(conn,'ts_table')

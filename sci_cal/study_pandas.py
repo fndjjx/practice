@@ -87,14 +87,6 @@ def df_ols():
     print model.beta
     print s.corr()
   
-   
-
-
-
-
-
-
-
 
 if __name__=="__main__":
     df_ols()

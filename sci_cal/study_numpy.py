@@ -128,11 +128,5 @@ def random_walk(n):
 
 
 
-
-
-
-
-
-
 if __name__ == "__main__":
     calc()

@@ -98,6 +98,8 @@ def unique_result(data):
 def build_tree(cur, tablename, sample, nodeid = '0'):
     ent = entropy(sample)
     unique = unique_feature(sample)
+    print "unique "
+    print unique
     best_gain = 0
     criteria = []
     lc = []
