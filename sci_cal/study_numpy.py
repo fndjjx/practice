@@ -84,6 +84,8 @@ def calc():
     data2 = np.arange(-5,0)
     cond = np.array([True,False,True,False,False])
     print cond
+    print data
+    print data2
     print np.where(cond,data,data2)
     print np.where(data>2,2,-2)
     print np.where(data>2,2,data)
