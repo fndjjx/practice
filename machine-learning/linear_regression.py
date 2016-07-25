@@ -60,7 +60,6 @@ class logistic_regression():
         self.theta = [0.0]*len(sample[0])
         self.sample = sample
         self.target = target
-        print self.sample,self.target
 
     def grad_descend(self, step, n):
         for j in range(n):
@@ -70,8 +69,6 @@ class logistic_regression():
                 yi = self.target[i]
                 h_theta = sigmoid(np.dot(np.array(self.theta).reshape(1,len(self.theta)),np.array(xi).reshape(len(xi),1)))
                 tmp += (yi-h_theta)*xi
-            print "error"
-            print tmp
             self.theta = self.theta + step*tmp
             self.theta = self.theta[0]
 
